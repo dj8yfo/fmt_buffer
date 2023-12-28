@@ -1,6 +1,6 @@
 use core::fmt;
 
-const ELIPSIS_SIZE: usize = 3;
+// const ELIPSIS_SIZE: usize = 3;
 
 pub struct TruncatingFmtBuffer<const N: usize> {
     buffer: [u8; N],
@@ -9,12 +9,12 @@ pub struct TruncatingFmtBuffer<const N: usize> {
 }
 
 impl<const N: usize> TruncatingFmtBuffer<N> {
-    #[allow(unused)]
-    const fn assert_size() {
-        if N <= ELIPSIS_SIZE {
-            panic!("smaller than ellipsis size");
-        }
-    }
+    // #[allow(unused)]
+    // const fn assert_size() {
+    //     if N <= ELIPSIS_SIZE {
+    //         panic!("smaller than ellipsis size");
+    //     }
+    // }
 
     pub fn new() -> Self {
         TruncatingFmtBuffer {
@@ -24,24 +24,19 @@ impl<const N: usize> TruncatingFmtBuffer<N> {
         }
     }
 
-    pub fn as_str(&mut self) -> &str {
+    pub fn as_str(&mut self) -> (&str, bool) {
         debug_assert!(self.used <= self.buffer.len());
         use core::str::from_utf8_unchecked;
-        if self.truncated {
-            for i in 0..ELIPSIS_SIZE {
-                self.buffer[N - 1 - i] = '.' as u8;
-            }
-
-            unsafe { from_utf8_unchecked(&self.buffer[..]) }
-        } else {
-            unsafe { from_utf8_unchecked(&self.buffer[..self.used]) }
-        }
+        (
+            unsafe { from_utf8_unchecked(&self.buffer[..self.used]) },
+            self.truncated,
+        )
     }
 }
 
 impl<const N: usize> fmt::Write for TruncatingFmtBuffer<N> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let remaining_buf = &mut self.buffer[self.used..(N - ELIPSIS_SIZE)];
+        let remaining_buf = &mut self.buffer[self.used..];
         let raw_s = s.as_bytes();
 
         let raw_s_len = raw_s.len();
@@ -84,7 +79,7 @@ mod tests {
 
         write!(buffer, "{} - 0x{:x}", 42, 42).expect("truncated fmt buffer error");
 
-        assert_eq!("42 - 0x2a", buffer.as_str());
+        assert_eq!(("42 - 0x2a", false), buffer.as_str());
     }
     #[test]
     pub fn test_longer() {
@@ -92,7 +87,7 @@ mod tests {
 
         write!(buffer, "{} - 0x{:x}", 4000, 4001).expect("truncated fmt buffer error");
 
-        assert_eq!("4000 - 0xfa1", buffer.as_str());
+        assert_eq!(("4000 - 0xfa1", false), buffer.as_str());
     }
 
     #[test]
@@ -101,16 +96,17 @@ mod tests {
 
         write!(buffer, "long: {} - 0x{:x}", 400000, 400100).expect("truncated fmt buffer error");
 
-        assert_eq!("long: 400000 - 0x61ae4", buffer.as_str());
+        assert_eq!(("long: 400000 - 0x61ae4", false), buffer.as_str());
     }
 
     #[test]
     pub fn test_too_long() {
         let mut buffer = TruncatingFmtBuffer::<30>::new();
 
-        write!(buffer, "toooooo long: {} - 0x{:x}", 400000, 400100).expect("truncated fmt buffer error");
+        write!(buffer, "toooooo long:    {} - 0x{:x}", 400000, 400100)
+            .expect("truncated fmt buffer error");
 
-        assert_eq!("toooooo long: 400000 - 0x61...", buffer.as_str());
+        assert_eq!(("toooooo long:    400000 - 0x61", true), buffer.as_str());
     }
 
     #[test]
@@ -118,11 +114,11 @@ mod tests {
         let mut buffer = TruncatingFmtBuffer::<30>::new();
 
         write!(buffer, "toooooo long").expect("truncated fmt buffer error");
-        assert_eq!("toooooo long", buffer.as_str());
-        write!(buffer, ": {} - 0x{:x}", 400000, 400100).expect("truncated fmt buffer error");
+        assert_eq!(("toooooo long", false), buffer.as_str());
+        write!(buffer, ":    {} - 0x{:x}", 400000, 400100).expect("truncated fmt buffer error");
 
-        assert_eq!("toooooo long: 400000 - 0x61...", buffer.as_str());
+        assert_eq!(("toooooo long:    400000 - 0x61", true), buffer.as_str());
         write!(buffer, "some more").expect("truncated fmt buffer error");
-        assert_eq!("toooooo long: 400000 - 0x61...", buffer.as_str());
+        assert_eq!(("toooooo long:    400000 - 0x61", true), buffer.as_str());
     }
 }
